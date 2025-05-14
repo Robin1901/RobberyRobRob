@@ -47,7 +47,7 @@ public class Movement : MonoBehaviour
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
 
         xRotation -= mouseY;
-        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+        xRotation = Mathf.Clamp(xRotation, -60f, 75f); // cam max rotation
         cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f); // cam drehen
 
         transform.Rotate(Vector3.up * mouseX); // player drehen
