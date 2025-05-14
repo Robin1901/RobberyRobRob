@@ -449,6 +449,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   walkSpeed: 5
+  sprintSpeed: 7.5
+  crouchSpeed: 2
+  mouseSensitivity: 100
+  cameraTransform: {fileID: 963194228}
 --- !u!65 &1506300738
 BoxCollider:
   m_ObjectHideFlags: 0

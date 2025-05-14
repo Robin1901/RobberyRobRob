@@ -7,7 +7,11 @@ public class Movement : MonoBehaviour
 {
     [Header("Speeds")]
     public float walkSpeed = 5f;
-    public float sprintMultiplier = 1.5f;
+    public float sprintSpeed = 7.5f;
+    public float crouchSpeed = 2f;
+
+    private float currentSpeed = 0f;
+
 
     [Header("Mouse Look")]
     public float mouseSensitivity = 100f;
@@ -46,13 +50,26 @@ public class Movement : MonoBehaviour
         if (rawMove.sqrMagnitude > 1f)
             rawMove = rawMove.normalized; //diagonal nicht schneller
 
-        bool shiftPressed = Input.GetKey(KeyCode.LeftShift);
+        bool shiftPressed = Input.GetKey(KeyCode.LeftShift); //shift gedrückt?
+        bool strgPressed = Input.GetKey(KeyCode.LeftControl); //strg gedrückt?
 
-        float currentSpeed = shiftPressed
-                             ? walkSpeed * sprintMultiplier
-                             : walkSpeed;
+        float targetSpeed;
+        if (shiftPressed && !strgPressed)
+        {
+            targetSpeed = sprintSpeed;
+        }
+        else if (strgPressed && !shiftPressed)
+        {
+            targetSpeed = crouchSpeed;
+        }
+        else
+        {
+            targetSpeed = walkSpeed;
+        }
 
-        controller.Move(rawMove * currentSpeed * Time.deltaTime); //bewegen
+        currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, Time.deltaTime * 10f); //speed unterschiede smoothen
+
+        controller.Move(rawMove * currentSpeed * Time.deltaTime); //char endlich bewegen
     }
 }
 
