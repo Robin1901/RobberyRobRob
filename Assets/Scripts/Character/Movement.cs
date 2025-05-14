@@ -52,8 +52,8 @@ public class Movement : MonoBehaviour
 
         transform.Rotate(Vector3.up * mouseX); // player drehen
 
-        float x = Input.GetAxis("Horizontal");
-        float z = Input.GetAxis("Vertical");
+        float x = Input.GetAxisRaw("Horizontal");
+        float z = Input.GetAxisRaw("Vertical");
 
         Vector3 rawMove = transform.right * x + transform.forward * z; // bewegen in cam richtung
         if (rawMove.sqrMagnitude > 1f)
@@ -81,7 +81,15 @@ public class Movement : MonoBehaviour
             targetFOV = normalFOV;
         }
 
-        currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, Time.deltaTime * 10f); // Speedänderung smoothen
+        if (rawMove == Vector3.zero)
+        {
+            currentSpeed = 0f;
+        }
+        else
+        {
+            currentSpeed = targetSpeed;
+        }
+        // Speedänderung smoothen
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovLerpSpeed); // FOV änderung smoothen
 
         controller.Move(rawMove * currentSpeed * Time.deltaTime); // char endlich bewegen
