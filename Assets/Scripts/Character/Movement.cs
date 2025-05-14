@@ -6,23 +6,26 @@ using UnityEngine;
 public class Movement : MonoBehaviour
 {
     [Header("Speeds")]
-    public float walkSpeed = 5f;
-    public float sprintSpeed = 7.5f;
+    public float walkSpeed = 4.5f;
+    public float sprintSpeed = 7f;
     public float crouchSpeed = 2f;
+
+    // Öffentlich, damit andere Skripte sie abfragen können:
+    public bool isSprinting { get; private set; }
+    public bool isCrouching { get; private set; }
 
     private float currentSpeed = 0f;
 
-
     [Header("Mouse Look")]
-    public float mouseSensitivity = 100f; // sens
-    public Transform cameraTransform;    // char cam
-    private float xRotation = 0f;        // camera pitch
+    public float mouseSensitivity = 100f;
+    public Transform cameraTransform;
+    private float xRotation = 0f;
 
     [Header("FOV Settings")]
-    private float normalFOV = 60f;        // standard fov
-    private float sprintFOV = 67f;        // FOV sprinten
-    private float crouchFOV = 53f;      // FOV crouchen
-    private float fovLerpSpeed = 5f;      // FOV Anpassungsgeschwindigkeit
+    private float normalFOV = 60f;
+    private float sprintFOV = 65f;
+    private float crouchFOV = 55f;
+    private float fovLerpSpeed = 7f;
 
     private CharacterController controller;
     private Camera cam;
@@ -30,47 +33,41 @@ public class Movement : MonoBehaviour
     void Start()
     {
         controller = GetComponent<CharacterController>();
-        cam = cameraTransform.GetComponent<Camera>();
-
-
         if (cameraTransform == null)
             cameraTransform = Camera.main.transform;
+        cam = cameraTransform.GetComponent<Camera>();
 
-        Cursor.lockState = CursorLockMode.Locked; // cursor weg
+        Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
     void Update()
     {
-
+        // --- Mouse Look ---
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
+        xRotation = Mathf.Clamp(xRotation - mouseY, -60f, 75f);
+        cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        transform.Rotate(Vector3.up * mouseX);
 
-        xRotation -= mouseY;
-        xRotation = Mathf.Clamp(xRotation, -60f, 75f); // cam max rotation
-        cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f); // cam drehen
-
-        transform.Rotate(Vector3.up * mouseX); // player drehen
-
+        // --- Movement Input ---
         float x = Input.GetAxisRaw("Horizontal");
         float z = Input.GetAxisRaw("Vertical");
+        Vector3 rawMove = transform.right * x + transform.forward * z;
+        if (rawMove.sqrMagnitude > 1f) rawMove = rawMove.normalized;
 
-        Vector3 rawMove = transform.right * x + transform.forward * z; // bewegen in cam richtung
-        if (rawMove.sqrMagnitude > 1f)
-            rawMove = rawMove.normalized; // diagonal nicht schneller
+        // --- Zustand erkennen ---
+        isSprinting = Input.GetKey(KeyCode.LeftShift);
+        isCrouching = Input.GetKey(KeyCode.LeftControl);
 
-        bool shiftPressed = Input.GetKey(KeyCode.LeftShift); // shift gedrückt?
-        bool strgPressed = Input.GetKey(KeyCode.LeftControl); // strg gedrückt?
-
-        float targetSpeed; // einmal definieren zum Benutzen
+        float targetSpeed;
         float targetFOV;
-
-        if (shiftPressed && !strgPressed)
+        if (isSprinting && !isCrouching)
         {
             targetSpeed = sprintSpeed;
             targetFOV = sprintFOV;
         }
-        else if (strgPressed && !shiftPressed)
+        else if (isCrouching && !isSprinting)
         {
             targetSpeed = crouchSpeed;
             targetFOV = crouchFOV;
@@ -81,17 +78,14 @@ public class Movement : MonoBehaviour
             targetFOV = normalFOV;
         }
 
+        // --- Sofort starten / stoppen ---
         if (rawMove == Vector3.zero)
-        {
             currentSpeed = 0f;
-        }
         else
-        {
             currentSpeed = targetSpeed;
-        }
-        // Speedänderung smoothen
-        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovLerpSpeed); // FOV änderung smoothen
 
-        controller.Move(rawMove * currentSpeed * Time.deltaTime); // char endlich bewegen
+        // --- Anwenden ---
+        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, Time.deltaTime * fovLerpSpeed);
+        controller.Move(rawMove * currentSpeed * Time.deltaTime);
     }
 }
