@@ -5,6 +5,7 @@ public class HeadTurning : MonoBehaviour, IHeadTurning
     public Transform bodyTransform;
     public Transform chestTransform;
     public Transform neckAnchor;
+    public Movement movement; // Referenz auf dein Movement-Skript
 
     public float mouseSensitivity = 100f;
     private float xRotation = 0f;
@@ -26,6 +27,9 @@ public class HeadTurning : MonoBehaviour, IHeadTurning
     private Vector3 initialLocalPosition;
     private Vector3 chestInitialLocalPosition;
 
+    private float bobTimer = 0f;
+    private Vector3 bobOffset = Vector3.zero;
+
     public float LookDirectionY { get; private set; }
 
     private void Start()
@@ -33,17 +37,14 @@ public class HeadTurning : MonoBehaviour, IHeadTurning
         initialLocalPosition = transform.localPosition;
         chestInitialLocalPosition = chestTransform.localPosition;
 
+        transform.position = neckAnchor.position;
+
         Vector3 euler = transform.localEulerAngles;
         yRotation = euler.y;
         xRotation = euler.x;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-    }
-
-    private void LateUpdate()
-    {
-        transform.position = neckAnchor.position;
     }
 
     private void Update()
@@ -88,6 +89,7 @@ public class HeadTurning : MonoBehaviour, IHeadTurning
                 chestTargetZ = -chestMaxZRotation;
                 chestTargetX = chestMaxXOffset;
             }
+
         }
 
         targetHeadZRot = Mathf.Lerp(targetHeadZRot, headTargetZ, Time.deltaTime * headRotationSpeed);
@@ -95,20 +97,55 @@ public class HeadTurning : MonoBehaviour, IHeadTurning
         targetChestZRot = Mathf.Lerp(targetChestZRot, chestTargetZ, Time.deltaTime * headRotationSpeed);
         targetChestXOffset = Mathf.Lerp(targetChestXOffset, chestTargetX, Time.deltaTime * leanSpeed);
 
+        // Headbob / Atembewegung
+        float speedFactor;
+        float bobAmountY;
+        float bobAmountX;
+
+        if (movement.isSprinting) //Sprinten
+        {
+            speedFactor = 25f;
+            bobAmountY = 0.015f;
+            bobAmountX = 0.02f;
+        }
+        else if (movement.isMoving && !movement.isCrouching) //Laufen
+        {
+            speedFactor = 15f;
+            bobAmountY = 0.015f;
+            bobAmountX = 0.01f;
+        }
+        else //Langsames Atmen beim Crouchen & Stehen
+        {
+            speedFactor = 4f;
+            bobAmountY = 0.005f;
+            bobAmountX = 0f;
+        }
+
+        bobTimer += Time.deltaTime * speedFactor;
+        bobOffset.y = Mathf.Sin(bobTimer) * bobAmountY;
+        bobOffset.x = Mathf.Cos(bobTimer * 0.5f) * bobAmountX;
+
+        // Apply Rotations
         Quaternion headRotation = Quaternion.Euler(xRotation, yRotation, targetHeadZRot);
         Quaternion chestRotation = Quaternion.Euler(0f, chestTransform.localEulerAngles.y, targetChestZRot);
 
         transform.localRotation = headRotation;
         chestTransform.localRotation = chestRotation;
 
-        Vector3 headLocalPos = initialLocalPosition;
-        headLocalPos.x += targetHeadXOffset;
-        transform.localPosition = headLocalPos;
+        // Apply Positions (Lean + Bob)
+        Vector3 leanOffset = bodyTransform.right * targetHeadXOffset; // relativ zum Körper nach rechts/links
+        leanOffset += new Vector3(bobOffset.x, bobOffset.y, 0f);      // Atmen + Kopf bobben (nur x & y)
+
+        Vector3 headPos = initialLocalPosition + leanOffset;
+
+        transform.localPosition = headPos;
 
         Vector3 chestLocalPos = chestInitialLocalPosition;
         chestLocalPos.x += targetChestXOffset;
         chestTransform.localPosition = chestLocalPos;
 
-        LookDirectionY = bodyTransform.eulerAngles.y + Mathf.DeltaAngle(bodyTransform.eulerAngles.y, yRotation);
+        // LookDirectionY für Movement
+        LookDirectionY = bodyTransform.eulerAngles.y
+                     + Mathf.DeltaAngle(bodyTransform.eulerAngles.y, yRotation);
     }
 }

@@ -6,7 +6,7 @@ public class CameraSettings : MonoBehaviour
 {
     [Header("FOV Settings")]
     public float normalFOV = 60f;
-    public float sprintFOV = 65f;
+    public float sprintFOV = 70f;
     public float crouchFOV = 55f;
     public float fovLerpSpeed = 7f;
 
