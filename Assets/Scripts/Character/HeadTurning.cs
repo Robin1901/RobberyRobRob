@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class HeadTurning : MonoBehaviour
+public class HeadTurning : MonoBehaviour, IHeadTurning
 {
     public Transform bodyTransform;
 
@@ -9,7 +9,7 @@ public class HeadTurning : MonoBehaviour
     private float yRotation = 0f;
 
     private float headRotationSpeed = 6f;
-    private float maxHeadRotation = 15f;
+    public float maxHeadRotation = 15f; // wichtig: public, damit BodyController zugreifen kann
     private float headLeanOffset = 0.175f;
     private float leanSpeed = 5f;
 
@@ -17,6 +17,8 @@ public class HeadTurning : MonoBehaviour
     private float targetHeadOffsetX = 0f;
 
     private Vector3 initialLocalPosition;
+
+    public float LookDirectionY { get; private set; } // aktuelle Y-Drehung des Kopfes (global)
 
     private void Start()
     {
@@ -48,7 +50,7 @@ public class HeadTurning : MonoBehaviour
 
             yRotation += mouseX;
             xRotation -= mouseY;
-            xRotation = Mathf.Clamp(xRotation, -60f, 45f);
+            xRotation = Mathf.Clamp(xRotation, -60f, 75f);
         }
 
         float desiredRotation = 0f;
@@ -80,7 +82,9 @@ public class HeadTurning : MonoBehaviour
         newPos.x += targetHeadOffsetX;
         transform.localPosition = newPos;
 
-        float bodyYaw = bodyTransform.localEulerAngles.y;
-        bodyTransform.localRotation = Quaternion.Euler(0f, bodyYaw, 0f);
+        // Update öffentliche LookDirection in Weltkoordinaten (nur Y-Achse)
+        LookDirectionY = bodyTransform.eulerAngles.y + Mathf.DeltaAngle(bodyTransform.eulerAngles.y, yRotation);
+
+        // Körperrotation im HeadTurning nicht mehr setzen
     }
 }

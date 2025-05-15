@@ -1,60 +1,109 @@
-using System.Diagnostics;
 using UnityEngine;
 
-[RequireComponent(typeof(CharacterController))]
 public class Movement : MonoBehaviour
 {
-    [SerializeField] private Transform headPivot;
+    public MonoBehaviour headTurningBehaviour;
+    public Transform bodyTransform;
+    private float turnThreshold = 90f;
+    private float turnDuration = 0.325f;
+    [HideInInspector] public bool isMoving = false;
+    [HideInInspector] public bool isSprinting = false;
+    [HideInInspector] public bool isCrouching = false;
+
+    private IHeadTurning headTurning;
+    private float referenceYaw;
+    private bool isTurningInPlace;
+    private float turnStartYaw;
+    private float turnTargetYaw;
+    private float turnElapsed;
+
+    private CharacterController controller;
+    private Vector3 rawMove;
 
     private float walkSpeed = 4.5f;
     private float sprintSpeed = 7f;
     private float crouchSpeed = 2f;
 
-    public bool isSprinting { get; private set; }
-    public bool isCrouching { get; private set; }
-
-    private float currentSpeed = 0f;
-    private CharacterController controller;
-
-    void Start()
+    private void Awake()
     {
+        headTurning = headTurningBehaviour as IHeadTurning;
         controller = GetComponent<CharacterController>();
     }
 
-    void Update()
+    private void Start()
+    {
+        referenceYaw = bodyTransform.eulerAngles.y;
+    }
+
+    private void Update()
     {
         float x = Input.GetAxisRaw("Horizontal");
         float z = Input.GetAxisRaw("Vertical");
 
-        Vector3 forward = headPivot.forward;
-        Vector3 right = headPivot.right;
+        float headYaw = headTurning.LookDirectionY;
+        Quaternion yawRot = Quaternion.Euler(0f, headYaw, 0f);
+        Vector3 forward = yawRot * Vector3.forward;
+        Vector3 right = yawRot * Vector3.right;
 
-        forward.y = 0f;
-        right.y = 0f;
+        rawMove = right * x + forward * z;
+        if (rawMove.sqrMagnitude > 1f) rawMove.Normalize();
 
-        forward.Normalize();
-        right.Normalize();
-
-        Vector3 rawMove = right * x + forward * z;
-
-        if (rawMove.sqrMagnitude > 1f) rawMove = rawMove.normalized;
-
-        bool isMoving = rawMove != Vector3.zero;
-
+        isMoving = rawMove.sqrMagnitude > 0.001f;
         isSprinting = isMoving && Input.GetKey(KeyCode.LeftShift);
         isCrouching = isMoving && Input.GetKey(KeyCode.LeftControl);
 
-        float targetSpeed;
-
-        if (isSprinting && !isCrouching)
-            targetSpeed = sprintSpeed;
-        else if (isCrouching && !isSprinting)
-            targetSpeed = crouchSpeed;
+        if (isMoving)
+        {
+            isTurningInPlace = false;
+            referenceYaw = headYaw;
+            SetBodyYaw(headYaw);
+        }
         else
-            targetSpeed = walkSpeed;
+        {
+            float yawDiff = Mathf.DeltaAngle(referenceYaw, headYaw);
 
-        currentSpeed = isMoving ? targetSpeed : 0f;
+            if (isTurningInPlace)
+            {
+                if (Mathf.Abs(yawDiff) <= turnThreshold)
+                {
+                    isTurningInPlace = false;
+                    referenceYaw = bodyTransform.eulerAngles.y;
+                }
+                else
+                {
+                    turnElapsed += Time.deltaTime;
+                    float t = Mathf.Clamp01(turnElapsed / turnDuration);
+                    float smoothT = t * t * (3f - 2f * t);
+                    float newYaw = Mathf.LerpAngle(turnStartYaw, turnTargetYaw, smoothT);
+                    SetBodyYaw(newYaw);
 
-        controller.Move(rawMove * currentSpeed * Time.deltaTime);
+                    if (t >= 1f)
+                    {
+                        isTurningInPlace = false;
+                        referenceYaw = turnTargetYaw;
+                    }
+                }
+            }
+            else if (Mathf.Abs(yawDiff) > turnThreshold)
+            {
+                isTurningInPlace = true;
+                turnStartYaw = bodyTransform.eulerAngles.y;
+                turnTargetYaw = headYaw;
+                turnElapsed = 0f;
+            }
+        }
+
+        float speed = isSprinting ? sprintSpeed : isCrouching ? crouchSpeed : walkSpeed;
+        controller.Move(rawMove * speed * Time.deltaTime);
     }
+
+    private void SetBodyYaw(float yaw)
+    {
+        bodyTransform.rotation = Quaternion.Euler(0f, yaw, 0f);
+    }
+}
+
+public interface IHeadTurning
+{
+    float LookDirectionY { get; }
 }
