@@ -6,28 +6,48 @@ using UnityEngine.AI;
 public class WalkToDistantPoints : MonoBehaviour
 {
     [Header("Wander-Einstellungen")]
-    public float maxWanderDistance = 100f;
-    public float minTravelTime = 10f; // Mindestzeit in Sekunden unterwegs
-    public float arrivalThreshold = 0.5f;
+    private float maxWanderDistance = 30f;        // Maximale Distanz für neues Ziel
+    private float minTravelTime = 3f;             // Mindestzeit unterwegs
+    private float arrivalThreshold = 0.5f;        // Ziel erreicht ab Distanz
 
-    [Header("Drehung")]
-    public float pauseBeforeTurn = 0.3f;
-    public float pauseBetweenTurns = 2.0f;
-    public float rotationDuration = 2.0f;
-    public float pauseAfterTurn = 0.1f;
-    public float finalRotationDuration = 0.5f;
+    [Header("Drehung bei Ankunft (Basiswerte)")]
+    private float pauseBeforeTurnMin = 0.75f;      // Min Wartezeit vor Drehung
+    private float pauseBeforeTurnMax = 1.5f;      // Max Wartezeit vor Drehung
+    private float rotationDuration = 2.5f;        // Dauer für Drehungen
+    private float finalRotationDuration = 1f;     // Dauer Zielausrichtung
+    private float pauseBeforeMoveMin = 1f;         // Min Wartezeit vor Loslaufen
+    private float pauseBeforeMoveMax = 2.5f;       // Max Wartezeit vor Loslaufen
+
+    // Drehwinkelbereiche (für zufällige Auswahl)
+    private float firstTurnAngleMin = 20f;
+    private float firstTurnAngleMax = 90f;
 
     private NavMeshAgent agent;
     private bool isInArrivalRoutine = false;
     private bool hasStarted = false;
+
+    // Basisgeschwindigkeit für Geschwindigkeitsvariation
+    private float baseSpeed;
+    private Coroutine speedVariationCoroutine;
+
+    private AudioSource footstepAudio;
+
 
     private void Start()
     {
         agent = GetComponent<NavMeshAgent>();
         agent.updateRotation = false;
 
+        baseSpeed = agent.speed;
+        speedVariationCoroutine = StartCoroutine(VarySpeedRoutine());
+
         StartCoroutine(InitialMove());
+
+        footstepAudio = GetComponent<AudioSource>();
+
     }
+
+
 
     private void Update()
     {
@@ -38,13 +58,25 @@ public class WalkToDistantPoints : MonoBehaviour
         {
             StartCoroutine(ArrivalRoutine());
         }
+
+        if (agent.isStopped || agent.velocity.sqrMagnitude < 0.1f)
+        {
+            if (footstepAudio.isPlaying)
+                footstepAudio.Pause();
+        }
+        else
+        {
+            if (!footstepAudio.isPlaying)
+                footstepAudio.Play();
+        }
     }
+
+
+
 
     private IEnumerator InitialMove()
     {
-        PickAndGo(); // Ziel setzen
-
-        // Anfangsrotation zur ersten Zielrichtung
+        PickAndGo();
         yield return RotateToDestination(finalRotationDuration);
 
         agent.isStopped = false;
@@ -52,45 +84,31 @@ public class WalkToDistantPoints : MonoBehaviour
         hasStarted = true;
     }
 
-    private IEnumerator RotateToRotation(Quaternion targetRot, float duration)
-    {
-        float elapsed = 0f;
-        Quaternion start = transform.rotation;
 
-        while (elapsed < duration)
-        {
-            transform.rotation = Quaternion.Slerp(start, targetRot, elapsed / duration);
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        transform.rotation = targetRot;
-    }
 
     private IEnumerator ArrivalRoutine()
     {
         isInArrivalRoutine = true;
+
         agent.isStopped = true;
         agent.updateRotation = false;
 
-        float turnStartTime = Time.time;
-
-        // [MARK#1] Pause vor der ersten Drehung
+        // Zufällige Wartezeit vor Drehung
+        float pauseBeforeTurn = Random.Range(pauseBeforeTurnMin, pauseBeforeTurnMax);
         yield return new WaitForSeconds(pauseBeforeTurn);
 
-        // [MARK#2] Erste 180° Drehung (Drehdauer: rotationDuration)
-        yield return RotateOverTime(180f, rotationDuration);
+        // Zufälligen ersten Drehwinkel bestimmen (- für links)
+        float firstTurnAngle = -Random.Range(firstTurnAngleMin, firstTurnAngleMax);
+        yield return RotateOverTime(firstTurnAngle, rotationDuration * 0.5f);
 
-        // [MARK#3] Wartezeit zwischen den Drehungen (hier 0.3s z. B.)
-        yield return new WaitForSeconds(pauseBetweenTurns);
+        // Zweite Drehung so, dass Gesamtwinkel etwa +60° ±20°
+        float secondTurnAngle = -firstTurnAngle + Random.Range(100f, 140f);
+        yield return RotateOverTime(secondTurnAngle, rotationDuration);
 
-        // Zweite 180° Drehung zurück
-        yield return RotateOverTime(-180f, rotationDuration);
-
-        // Sofort das nächste Ziel wählen (kein zusätzliches Warten)
+        // Neues Ziel wählen
         PickAndGo();
 
-        // [MARK#4] Direkt zum neuen Ziel ausrichten (nur 1x)
+        // Zielrichtung berechnen und hin drehen
         Vector3 dir = (agent.destination - transform.position).normalized;
         if (dir.sqrMagnitude > 0.001f)
         {
@@ -98,46 +116,16 @@ public class WalkToDistantPoints : MonoBehaviour
             yield return RotateToRotation(targetRot, finalRotationDuration);
         }
 
+        // Zufällige Wartezeit vor Bewegung zum neuen Ziel
+        float pauseBeforeMoveToNewTarget = Random.Range(pauseBeforeMoveMin, pauseBeforeMoveMax);
+        yield return new WaitForSeconds(pauseBeforeMoveToNewTarget);
+
         agent.isStopped = false;
         agent.updateRotation = true;
         isInArrivalRoutine = false;
     }
 
 
-    private IEnumerator RotateOverTime(float angle, float duration)
-    {
-        Quaternion start = transform.rotation;
-        Quaternion end = start * Quaternion.Euler(0f, angle, 0f);
-        float elapsed = 0f;
-
-        while (elapsed < duration)
-        {
-            transform.rotation = Quaternion.Slerp(start, end, elapsed / duration);
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        transform.rotation = end;
-    }
-
-    private IEnumerator RotateToDestination(float duration)
-    {
-        Vector3 dir = (agent.destination - transform.position).normalized;
-        if (dir.sqrMagnitude < 0.001f) yield break;
-
-        Quaternion targetRot = Quaternion.LookRotation(dir, Vector3.up);
-        Quaternion startRot = transform.rotation;
-        float elapsed = 0f;
-
-        while (elapsed < duration)
-        {
-            transform.rotation = Quaternion.Slerp(startRot, targetRot, elapsed / duration);
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        transform.rotation = targetRot;
-    }
 
     private void PickAndGo()
     {
@@ -165,9 +153,9 @@ public class WalkToDistantPoints : MonoBehaviour
                 }
             }
         }
-
-        Debug.LogWarning("⚠️ Kein weit genug entfernter Zielpunkt gefunden.");
     }
+
+
 
     private float GetPathLength(NavMeshPath path)
     {
@@ -179,9 +167,84 @@ public class WalkToDistantPoints : MonoBehaviour
         return total;
     }
 
-    private void OnDrawGizmosSelected()
+
+
+    private IEnumerator RotateOverTime(float angle, float duration)
     {
-        Gizmos.color = new Color(1, 1, 0, 0.2f);
-        Gizmos.DrawWireSphere(transform.position, maxWanderDistance);
+        Quaternion start = transform.rotation;
+        Quaternion end = start * Quaternion.Euler(0f, angle, 0f);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            transform.rotation = Quaternion.Slerp(start, end, t);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.rotation = end;
     }
+
+
+
+    private IEnumerator RotateToRotation(Quaternion targetRot, float duration)
+    {
+        Quaternion start = transform.rotation;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            transform.rotation = Quaternion.Slerp(start, targetRot, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.rotation = targetRot;
+    }
+
+
+
+    private IEnumerator RotateToDestination(float duration)
+    {
+        Vector3 dir = (agent.destination - transform.position).normalized;
+        if (dir.sqrMagnitude < 0.001f) yield break;
+
+        Quaternion targetRot = Quaternion.LookRotation(dir, Vector3.up);
+        yield return RotateToRotation(targetRot, duration);
+    }
+
+
+
+    private IEnumerator VarySpeedRoutine()
+    {
+        while (true)
+        {
+            float targetSpeed = baseSpeed * Random.Range(0.7f, 1.3f);
+            float duration = Random.Range(1f, 3f);
+
+            yield return SmoothSpeedChange(targetSpeed, duration);
+
+            yield return new WaitForSeconds(Random.Range(1f, 3f));
+        }
+    }
+
+
+
+    private IEnumerator SmoothSpeedChange(float targetSpeed, float duration)
+    {
+        float startSpeed = agent.speed;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            agent.speed = Mathf.Lerp(startSpeed, targetSpeed, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        agent.speed = targetSpeed;
+    }
+
+
 }
